@@ -19,8 +19,12 @@ const client = new Client({
   ]
 });
 
-app.get('/', (req, res) => res.send('Lead Bot is running!'));
+// HEALTH CHECK - Railway hits this to confirm app is alive
+app.get('/', (req, res) => {
+  res.status(200).send('OK');
+});
 
+// Google Places lookup by phone
 async function lookupBusiness(phone) {
   try {
     const searchRes = await axios.get('https://maps.googleapis.com/maps/api/place/textsearch/json', {
@@ -32,7 +36,7 @@ async function lookupBusiness(phone) {
     const detailRes = await axios.get('https://maps.googleapis.com/maps/api/place/details/json', {
       params: {
         place_id: results[0].place_id,
-        fields: 'name,formatted_address,rating,user_ratings_total,website,url,formatted_phone_number',
+        fields: 'name,formatted_address,rating,user_ratings_total,website,url',
         key: GOOGLE_API_KEY
       }
     });
@@ -51,8 +55,11 @@ async function lookupBusiness(phone) {
   }
 }
 
+// Webhook - GHL posts here when lead moves to Interested
 app.post('/webhook', async (req, res) => {
-  res.json({ success: true });
+  // Respond immediately so GHL doesn't timeout
+  res.status(200).json({ success: true });
+
   try {
     const data = req.body;
     console.log('Webhook received:', JSON.stringify(data));
@@ -66,8 +73,12 @@ app.post('/webhook', async (req, res) => {
     const embed = new EmbedBuilder()
       .setColor(0x00FF88)
       .setTitle('🔥 NEW INTERESTED LEAD')
-      .setDescription('A new lead is ready for preview building!')
-      .addFields({ name: '👤 Contact', value: `**${name}**\n📞 ${phone || 'N/A'}\n📧 ${email || 'N/A'}`, inline: false });
+      .setDescription('Ready for preview building!')
+      .addFields({ 
+        name: '👤 Contact', 
+        value: `**${name}**\n📞 ${phone || 'N/A'}\n📧 ${email || 'N/A'}`, 
+        inline: false 
+      });
 
     if (biz) {
       embed.addFields({
@@ -77,28 +88,39 @@ app.post('/webhook', async (req, res) => {
           `📍 ${biz.address}`,
           biz.rating !== 'N/A' ? `⭐ ${biz.rating}/5 (${biz.reviews} reviews)` : '⭐ No rating found',
           biz.website ? `🌐 [Website](${biz.website})` : '🌐 No website found',
-          biz.gmb_url ? `📍 [Google My Business Profile](${biz.gmb_url})` : '📍 No GMB found'
+          biz.gmb_url ? `📍 [View GMB Profile](${biz.gmb_url})` : '📍 No GMB found'
         ].join('\n'),
         inline: false
       });
       const socialLink = `https://www.google.com/search?q=${encodeURIComponent(biz.name + ' facebook OR instagram OR linkedin')}`;
-      embed.addFields({ name: '🔗 Find Socials', value: `[🔍 Search ${biz.name} socials](${socialLink})`, inline: false });
+      embed.addFields({ 
+        name: '🔗 Find Socials', 
+        value: `[🔍 Click to search ${biz.name} socials](${socialLink})`, 
+        inline: false 
+      });
     } else {
-      embed.addFields({ name: '⚠️ No GMB Found', value: `Phone: ${phone}\nSearch manually.`, inline: false });
+      embed.addFields({ 
+        name: '⚠️ No GMB Found', 
+        value: `Phone searched: ${phone}`, 
+        inline: false 
+      });
     }
 
-    embed.setFooter({ text: 'Lead Bot • Preview Setter System' }).setTimestamp();
+    embed.setFooter({ text: 'Lead Bot • CMD Marketing' }).setTimestamp();
 
     const channel = await client.channels.fetch(NEW_LEADS_CHANNEL_ID);
     await channel.send({ embeds: [embed] });
-    console.log('Posted to Discord for', name);
+    console.log('✅ Posted to Discord for', name);
+
   } catch (err) {
-    console.error('Webhook error:', err);
+    console.error('Webhook processing error:', err);
   }
 });
 
+// /done slash command
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand() || interaction.commandName !== 'done') return;
+
   const previewUrl = interaction.options.getString('preview_url');
   const notes = interaction.options.getString('notes') || 'No notes';
 
@@ -108,17 +130,18 @@ client.on('interactionCreate', async (interaction) => {
     .addFields(
       { name: '🔗 Preview Link', value: previewUrl, inline: false },
       { name: '📝 Notes', value: notes, inline: false },
-      { name: '👤 Submitted by', value: interaction.user.username, inline: false }
+      { name: '👤 Built by', value: interaction.user.username, inline: false }
     )
     .setTimestamp();
 
   const reviewChannel = await client.channels.fetch(REVIEW_CHANNEL_ID);
-  await reviewChannel.send({ content: '🎬 New preview ready for review!', embeds: [embed] });
-  await interaction.reply({ content: '✅ Done! Posted to review channel.', ephemeral: true });
+  await reviewChannel.send({ content: '🎬 New preview ready — go record your Loom!', embeds: [embed] });
+  await interaction.reply({ content: '✅ Done! Owner has been notified.', ephemeral: true });
 });
 
+// Register /done slash command
 client.once('ready', async () => {
-  console.log('Bot online as', client.user.tag);
+  console.log('✅ Discord bot online as', client.user.tag);
   try {
     const guild = client.guilds.cache.first();
     if (guild) {
@@ -130,14 +153,21 @@ client.once('ready', async () => {
           { name: 'notes', description: 'Any notes about this lead', type: 3, required: false }
         ]
       });
-      console.log('Slash command /done registered');
+      console.log('✅ /done command registered');
     }
   } catch (err) {
     console.error('Command registration error:', err);
   }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log('Server running on port', PORT);
+// Graceful shutdown handler
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received - shutting down gracefully');
+  server.close(() => process.exit(0));
+});
+
+// START SERVER FIRST, then login Discord
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log('🚀 Server running on port', PORT);
   client.login(DISCORD_TOKEN);
 });

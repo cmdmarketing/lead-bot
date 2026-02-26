@@ -10,7 +10,7 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const NEW_LEADS_CHANNEL_ID = process.env.NEW_LEADS_CHANNEL_ID;
 const REVIEW_CHANNEL_ID = process.env.REVIEW_CHANNEL_ID;
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // ---- DISCORD CLIENT ----
 const client = new Client({

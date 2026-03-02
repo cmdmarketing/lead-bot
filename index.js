@@ -11,6 +11,8 @@ const REVIEW_CHANNEL_ID = process.env.REVIEW_CHANNEL_ID;
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const PORT = process.env.PORT;
 
+console.log('Token check:', DISCORD_TOKEN ? 'EXISTS, length=' + DISCORD_TOKEN.length : 'MISSING OR EMPTY');
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -70,7 +72,7 @@ function waitForDiscord() {
   });
 }
 
-// Webhook - GHL posts here when lead moves to Interested
+// Webhook
 app.post('/webhook', async (req, res) => {
   res.status(200).json({ success: true });
 
@@ -122,7 +124,6 @@ app.post('/webhook', async (req, res) => {
 
     embed.setFooter({ text: 'Lead Bot • CMD Marketing' }).setTimestamp();
 
-    // Wait for Discord to connect before posting
     await waitForDiscord();
 
     const channel = await client.channels.fetch(NEW_LEADS_CHANNEL_ID);
@@ -177,13 +178,13 @@ client.once('ready', async () => {
   }
 });
 
-// Graceful shutdown handler
+// Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received - shutting down gracefully');
   server.close(() => process.exit(0));
 });
 
-// START SERVER FIRST, then login Discord
+// START
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('🚀 Server running on port', PORT);
   client.login(DISCORD_TOKEN)

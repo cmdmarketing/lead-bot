@@ -108,9 +108,17 @@ app.post('/webhook', async (req, res) => {
 
     embed.setFooter({ text: 'Lead Bot • CMD Marketing' }).setTimestamp();
 
-    if (!client.isReady()) {
-  console.log('⚠️ Discord client not ready yet');
-  return;
+   if (!client.isReady()) {
+  console.log('⏳ Waiting for Discord client...');
+  await new Promise(resolve => {
+    const interval = setInterval(() => {
+      if (client.isReady()) {
+        clearInterval(interval);
+        resolve();
+      }
+    }, 500);
+    setTimeout(() => { clearInterval(interval); resolve(); }, 10000);
+  });
 }
 const channel = await client.channels.fetch(NEW_LEADS_CHANNEL_ID);
 await channel.send({ embeds: [embed] });

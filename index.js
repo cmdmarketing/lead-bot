@@ -19,7 +19,7 @@ const client = new Client({
   ]
 });
 
-// HEALTH CHECK - Railway hits this to confirm app is alive
+// HEALTH CHECK
 app.get('/', (req, res) => {
   res.status(200).send('OK');
 });
@@ -55,9 +55,23 @@ async function lookupBusiness(phone) {
   }
 }
 
+// Wait for Discord to be ready (up to 15 seconds)
+function waitForDiscord() {
+  return new Promise((resolve, reject) => {
+    if (client.isReady()) return resolve();
+    console.log('⏳ Waiting for Discord client...');
+    const timeout = setTimeout(() => {
+      reject(new Error('Discord client did not become ready in time'));
+    }, 15000);
+    client.once('ready', () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+  });
+}
+
 // Webhook - GHL posts here when lead moves to Interested
 app.post('/webhook', async (req, res) => {
-  // Respond immediately so GHL doesn't timeout
   res.status(200).json({ success: true });
 
   try {
@@ -108,24 +122,15 @@ app.post('/webhook', async (req, res) => {
 
     embed.setFooter({ text: 'Lead Bot • CMD Marketing' }).setTimestamp();
 
-   if (!client.isReady()) {
-  console.log('⏳ Waiting for Discord client...');
-  await new Promise(resolve => {
-    const interval = setInterval(() => {
-      if (client.isReady()) {
-        clearInterval(interval);
-        resolve();
-      }
-    }, 500);
-    setTimeout(() => { clearInterval(interval); resolve(); }, 10000);
-  });
-}
-const channel = await client.channels.fetch(NEW_LEADS_CHANNEL_ID);
-await channel.send({ embeds: [embed] });
+    // Wait for Discord to connect before posting
+    await waitForDiscord();
+
+    const channel = await client.channels.fetch(NEW_LEADS_CHANNEL_ID);
+    await channel.send({ embeds: [embed] });
     console.log('✅ Posted to Discord for', name);
 
   } catch (err) {
-    console.error('Webhook processing error:', err);
+    console.error('❌ Webhook processing error:', err.message);
   }
 });
 
@@ -181,5 +186,7 @@ process.on('SIGTERM', () => {
 // START SERVER FIRST, then login Discord
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('🚀 Server running on port', PORT);
-  client.login(DISCORD_TOKEN);
+  client.login(DISCORD_TOKEN)
+    .then(() => console.log('✅ Discord login successful'))
+    .catch(err => console.error('❌ Discord login FAILED:', err.message));
 });
